@@ -186,8 +186,10 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
   }
 
   public void setNumFields(int numFields) {
-    this.numFields = numFields;
-    this.bitSetWidthInBytes = calculateBitSetWidthInBytes(numFields);
+    if (this.numFields != numFields) {
+      this.numFields = numFields;
+      this.bitSetWidthInBytes = calculateBitSetWidthInBytes(numFields);
+    }
   }
 
   public void setNotNullAt(int i) {
