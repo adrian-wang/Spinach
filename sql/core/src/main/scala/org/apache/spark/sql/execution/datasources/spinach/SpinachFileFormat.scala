@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.JoinedRow
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.spinach.utils.SpinachUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{DataSourceRegister, Filter}
 import org.apache.spark.sql.types.StructType
@@ -53,7 +52,15 @@ private[sql] class SpinachFileFormat extends FileFormat
     // 1. Make the scanning etc. as lazy loading, as inferSchema probably not be called
     // 2. We need to pass down the spinach meta file and its associated partition path
 
-    val meta = SpinachUtils.getMeta(hadoopConf, catalog)
+    // TODO we support partitions, but this only read meta from one of the partitions
+    val partition2Meta = fileCatalog.allFiles().map(_.getPath.getParent).map { parent =>
+      (parent, new Path(parent, SpinachFileFormat.SPINACH_META_FILE))
+    }
+      .filter(pair => pair._2.getFileSystem(hadoopConf).exists(pair._2))
+      .toMap
+    meta = partition2Meta.values.headOption.map {
+      DataSourceMeta.initialize(_, hadoopConf)
+    }
     // SpinachFileFormat.serializeDataSourceMeta(hadoopConf, meta)
     inferSchema = meta.map(_.schema)
     fc = fileCatalog
@@ -64,6 +71,7 @@ private[sql] class SpinachFileFormat extends FileFormat
   // TODO inferSchema could be lazy computed
   var inferSchema: Option[StructType] = _
   var fc: FileCatalog = _
+  var meta: Option[DataSourceMeta] = _
 
   override def prepareWrite(
     sparkSession: SparkSession,
@@ -117,9 +125,9 @@ private[sql] class SpinachFileFormat extends FileFormat
       hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
     // TODO we need to pass the extra data source meta information via the func parameter
     // SpinachFileFormat.deserializeDataSourceMeta(hadoopConf) match {
-    SpinachUtils.getMeta(hadoopConf, fc) match {
-      case Some(meta) =>
-        val ic = new IndexContext(meta)
+    meta match {
+      case Some(m) =>
+        val ic = new IndexContext(m)
         BPlusTreeSearch.build(filters.toArray, ic)
         val filterScanner = ic.getScannerBuilder.map(_.build)
         val requiredIds = requiredSchema.map(dataSchema.fields.indexOf(_)).toArray
@@ -131,7 +139,7 @@ private[sql] class SpinachFileFormat extends FileFormat
           assert(file.partitionValues.numFields == partitionSchema.size)
 
           val iter = new SpinachDataReader(
-            new Path(new URI(file.filePath)), meta, filterScanner, requiredIds)
+            new Path(new URI(file.filePath)), m, filterScanner, requiredIds)
             .initialize(broadcastedHadoopConf.value.value)
 
           val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
@@ -199,10 +207,10 @@ private[spinach] class SpinachOutputWriterFactory(
           new Path(outputRoot, p._1), SpinachFileFormat.SPINACH_META_FILE)
         DataSourceMeta.write(partMetaPath, conf, partBuilder.build())
       })
+    } else if (partitionMeta.nonEmpty) {
+      val spinachMeta = builder.withNewSchema(dataSchema).build()
+      DataSourceMeta.write(path, conf, spinachMeta)
     }
-
-    val spinachMeta = builder.withNewSchema(dataSchema).build()
-    DataSourceMeta.write(path, conf, spinachMeta)
 
     super.commitJob(taskResults)
   }

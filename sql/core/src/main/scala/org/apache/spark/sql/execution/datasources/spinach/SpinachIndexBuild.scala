@@ -39,7 +39,7 @@ private[spinach] case class SpinachIndexBuild(
     indexName: String,
     indexColumns: Array[IndexColumn],
     schema: StructType,
-    @transient paths: Array[Path],
+    @transient paths: Seq[Path],
     overwrite: Boolean = true) extends Logging {
   @transient private lazy val ids =
     indexColumns.map(c => schema.map(_.name).toIndexedSeq.indexOf(c.columnName))
@@ -50,13 +50,12 @@ private[spinach] case class SpinachIndexBuild(
     } else {
       // TODO use internal scan
       val hadoopConf = sparkSession.sparkContext.hadoopConfiguration
-      @transient val p = paths(0)
-      @transient val fs = p.getFileSystem(hadoopConf)
-      @transient val fileIter = fs.listFiles(p, true)
-      @transient val dataPaths = new Iterator[Path] {
+      @transient val fs = paths.head.getFileSystem(hadoopConf)
+      @transient val fileIters = paths.map(fs.listFiles(_, false))
+      @transient val dataPaths = fileIters.flatMap(fileIter => new Iterator[Path] {
         override def hasNext: Boolean = fileIter.hasNext
         override def next(): Path = fileIter.next().getPath
-      }.toSeq
+      }.toSeq)
       val data = if (overwrite) {
         dataPaths.map(_.toString).filter(_.endsWith(SpinachFileFormat.SPINACH_DATA_EXTENSION))
       } else {
@@ -69,13 +68,13 @@ private[spinach] case class SpinachIndexBuild(
       val serializableConfiguration =
         new SerializableConfiguration(sparkSession.sparkContext.hadoopConfiguration)
       val confBroadcast = sparkSession.sparkContext.broadcast(serializableConfiguration)
-      val meta = SpinachUtils.getMeta(hadoopConf, p) match {
-        case Some(m) => m
-        case None => DataSourceMeta.newBuilder().withNewSchema(schema).build()
-      }
       sparkSession.sparkContext.parallelize(data, data.length).map(dataString => {
-      // data.foreach(dataString => {
         val d = new Path(dataString)
+        // TODO many task will use the same meta, so optimize here
+        val meta = SpinachUtils.getMeta(confBroadcast.value.value, d.getParent) match {
+          case Some(m) => m
+          case None => sys.error("Lost meta")
+        }
         // scan every data file
         // TODO we need to set the Data Reader File class name here.
         val reader = new SpinachDataReader(d, meta, None, ids)
@@ -114,10 +113,8 @@ private[spinach] case class SpinachIndexBuild(
         // sort keys
         java.util.Arrays.sort(uniqueKeys, comparator)
         // build index file
-        val dataFilePathString = d.toString
-        val pos = dataFilePathString.lastIndexOf(SpinachFileFormat.SPINACH_DATA_EXTENSION)
         val indexFile = new Path(
-          IndexUtils.indexFileNameFromDataFileName(dataFilePathString, indexName))
+          IndexUtils.indexFileNameFromDataFileName(dataString, indexName))
         val fs = indexFile.getFileSystem(hadoopConf)
         // we are overwriting index files
         val fileOut = fs.create(indexFile, true)
