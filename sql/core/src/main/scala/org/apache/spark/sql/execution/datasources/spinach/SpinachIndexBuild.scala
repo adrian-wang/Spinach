@@ -39,7 +39,8 @@ private[spinach] case class SpinachIndexBuild(
     indexName: String,
     indexColumns: Array[IndexColumn],
     schema: StructType,
-    @transient paths: Array[Path]) extends Logging {
+    @transient paths: Array[Path],
+    overwrite: Boolean = true) extends Logging {
   @transient private lazy val ids =
     indexColumns.map(c => schema.map(_.name).toIndexedSeq.indexOf(c.columnName))
   @transient private lazy val keySchema = StructType(ids.map(schema.toIndexedSeq(_)))
@@ -56,19 +57,23 @@ private[spinach] case class SpinachIndexBuild(
         override def hasNext: Boolean = fileIter.hasNext
         override def next(): Path = fileIter.next().getPath
       }.toSeq
-      val data = dataPaths.map(_.toString).filter(
-        _.endsWith(SpinachFileFormat.SPINACH_DATA_EXTENSION))
+      val data = if (overwrite) {
+        dataPaths.map(_.toString).filter(_.endsWith(SpinachFileFormat.SPINACH_DATA_EXTENSION))
+      } else {
+        dataPaths.map(_.toString).filterNot(
+          n => fs.exists(new Path(IndexUtils.indexFileNameFromDataFileName(n, indexName)))).filter(
+            _.endsWith(SpinachFileFormat.SPINACH_DATA_EXTENSION))
+      }
       assert(!ids.exists(id => id < 0), "Index column not exists in schema.")
       @transient lazy val ordering = buildOrdering(ids, keySchema)
       val serializableConfiguration =
         new SerializableConfiguration(sparkSession.sparkContext.hadoopConfiguration)
       val confBroadcast = sparkSession.sparkContext.broadcast(serializableConfiguration)
-      val num = dataPaths.length
       val meta = SpinachUtils.getMeta(hadoopConf, p) match {
         case Some(m) => m
         case None => DataSourceMeta.newBuilder().withNewSchema(schema).build()
       }
-      sparkSession.sparkContext.parallelize(data, num).map(dataString => {
+      sparkSession.sparkContext.parallelize(data, data.length).map(dataString => {
       // data.foreach(dataString => {
         val d = new Path(dataString)
         // scan every data file
