@@ -39,20 +39,20 @@ private[spinach] case class SpinachIndexBuild(
     indexName: String,
     indexColumns: Array[IndexColumn],
     schema: StructType,
-    @transient paths: Seq[Path],
+    paths: Seq[Path],
     overwrite: Boolean = true) extends Logging {
-  @transient private lazy val ids =
+  private lazy val ids =
     indexColumns.map(c => schema.map(_.name).toIndexedSeq.indexOf(c.columnName))
-  @transient private lazy val keySchema = StructType(ids.map(schema.toIndexedSeq(_)))
+  private lazy val keySchema = StructType(ids.map(schema.toIndexedSeq(_)))
   def execute(): RDD[InternalRow] = {
     if (paths.isEmpty) {
       // the input path probably be pruned, do nothing
     } else {
       // TODO use internal scan
       val hadoopConf = sparkSession.sparkContext.hadoopConfiguration
-      @transient val fs = paths.head.getFileSystem(hadoopConf)
-      @transient val fileIters = paths.map(fs.listFiles(_, false))
-      @transient val dataPaths = fileIters.flatMap(fileIter => new Iterator[Path] {
+      val fs = paths.head.getFileSystem(hadoopConf)
+      val fileIters = paths.map(fs.listFiles(_, false))
+      val dataPaths = fileIters.flatMap(fileIter => new Iterator[Path] {
         override def hasNext: Boolean = fileIter.hasNext
         override def next(): Path = fileIter.next().getPath
       }.toSeq)
@@ -64,7 +64,7 @@ private[spinach] case class SpinachIndexBuild(
             _.endsWith(SpinachFileFormat.SPINACH_DATA_EXTENSION))
       }
       assert(!ids.exists(id => id < 0), "Index column not exists in schema.")
-      @transient lazy val ordering = buildOrdering(ids, keySchema)
+      val ordering = buildOrdering(ids, keySchema)
       val serializableConfiguration =
         new SerializableConfiguration(sparkSession.sparkContext.hadoopConfiguration)
       val confBroadcast = sparkSession.sparkContext.broadcast(serializableConfiguration)

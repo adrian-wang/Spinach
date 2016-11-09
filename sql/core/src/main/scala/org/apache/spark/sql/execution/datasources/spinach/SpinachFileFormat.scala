@@ -63,14 +63,12 @@ private[sql] class SpinachFileFormat extends FileFormat
     }
     // SpinachFileFormat.serializeDataSourceMeta(hadoopConf, meta)
     inferSchema = meta.map(_.schema)
-    fc = fileCatalog
 
     this
   }
 
   // TODO inferSchema could be lazy computed
   var inferSchema: Option[StructType] = _
-  var fc: FileCatalog = _
   var meta: Option[DataSourceMeta] = _
 
   override def prepareWrite(
