@@ -35,11 +35,11 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
 
 private[spinach] case class SpinachIndexBuild(
-    sparkSession: SparkSession,
+    @transient sparkSession: SparkSession,
     indexName: String,
     indexColumns: Array[IndexColumn],
     schema: StructType,
-    paths: Seq[Path],
+    @transient paths: Seq[Path],
     overwrite: Boolean = true) extends Logging {
   private lazy val ids =
     indexColumns.map(c => schema.map(_.name).toIndexedSeq.indexOf(c.columnName))
@@ -64,9 +64,9 @@ private[spinach] case class SpinachIndexBuild(
             _.endsWith(SpinachFileFormat.SPINACH_DATA_EXTENSION))
       }
       assert(!ids.exists(id => id < 0), "Index column not exists in schema.")
-      val ordering = buildOrdering(ids, keySchema)
+      lazy val ordering = buildOrdering(ids, keySchema)
       val serializableConfiguration =
-        new SerializableConfiguration(sparkSession.sparkContext.hadoopConfiguration)
+        new SerializableConfiguration(hadoopConf)
       val confBroadcast = sparkSession.sparkContext.broadcast(serializableConfiguration)
       sparkSession.sparkContext.parallelize(data, data.length).map(dataString => {
         val d = new Path(dataString)
