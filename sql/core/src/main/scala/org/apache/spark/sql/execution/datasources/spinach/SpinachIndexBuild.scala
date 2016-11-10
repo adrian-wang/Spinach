@@ -57,11 +57,12 @@ private[spinach] case class SpinachIndexBuild(
         override def next(): Path = fileIter.next().getPath
       }.toSeq)
       val data = if (overwrite) {
-        dataPaths.map(_.toString).filter(_.endsWith(SpinachFileFormat.SPINACH_DATA_EXTENSION))
+        dataPaths.filterNot(dp =>
+          dp.getName.startsWith(".") || dp.getName.startsWith("_")).map(_.toString)
       } else {
-        dataPaths.map(_.toString).filterNot(
-          n => fs.exists(new Path(IndexUtils.indexFileNameFromDataFileName(n, indexName)))).filter(
-            _.endsWith(SpinachFileFormat.SPINACH_DATA_EXTENSION))
+        dataPaths.filterNot(
+          n => fs.exists(IndexUtils.indexFileFromDataFile(n, indexName))).filter(
+            _.toString.endsWith(SpinachFileFormat.SPINACH_DATA_EXTENSION)).map(_.toString)
       }
       assert(!ids.exists(id => id < 0), "Index column not exists in schema.")
       lazy val ordering = buildOrdering(ids, keySchema)
@@ -113,8 +114,7 @@ private[spinach] case class SpinachIndexBuild(
         // sort keys
         java.util.Arrays.sort(uniqueKeys, comparator)
         // build index file
-        val indexFile = new Path(
-          IndexUtils.indexFileNameFromDataFileName(dataString, indexName))
+        val indexFile = IndexUtils.indexFileFromDataFile(d, indexName)
         val fs = indexFile.getFileSystem(hadoopConf)
         // we are overwriting index files
         val fileOut = fs.create(indexFile, true)
