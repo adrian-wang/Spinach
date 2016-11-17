@@ -48,8 +48,7 @@ object IndexUtils {
   def indexFileFromDataFile(dataFile: Path, name: String): Path = {
     import SpinachFileFormat._
     val dataFileName = dataFile.getName
-    val simpleName = dataFileName.substring(0, dataFileName.lastIndexOf("."))
 
-    new Path(dataFile.getParent, "." + simpleName + "." + name + SPINACH_INDEX_EXTENSION)
+    new Path(dataFile.getParent, "." + dataFileName + "." + name + SPINACH_INDEX_EXTENSION)
   }
 }

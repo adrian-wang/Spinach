@@ -52,11 +52,13 @@ class IndexUtilsSuite extends SparkFunSuite with Logging {
   }
 
   test("index path generating") {
-    assertEquals("/path/to/.t1.index1.index",
+    assertEquals("/path/to/.t1.data.index1.index",
       IndexUtils.indexFileFromDataFile(new Path("/path/to/t1.data"), "index1").toString)
-    assertEquals("/.t1.index1.index",
+    assertEquals("/.t1.data.index1.index",
       IndexUtils.indexFileFromDataFile(new Path("/t1.data"), "index1").toString)
-    assertEquals("/path/to/.t1.index1.index",
+    assertEquals("/path/to/.t1.parquet.index1.index",
       IndexUtils.indexFileFromDataFile(new Path("/path/to/t1.parquet"), "index1").toString)
+    assertEquals("/path/to/.t1.index1.index",
+      IndexUtils.indexFileFromDataFile(new Path("/path/to/t1"), "index1").toString)
   }
 }
