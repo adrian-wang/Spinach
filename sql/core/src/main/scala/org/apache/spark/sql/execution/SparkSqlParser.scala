@@ -18,20 +18,20 @@
 package org.apache.spark.sql.execution
 
 import scala.collection.JavaConverters._
-import scala.util.Try
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation, ScriptInputOutputSchema}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTempViewUsing, _}
-import org.apache.spark.sql.execution.datasources.spinach.{CreateIndex, DropIndex, IndexColumn}
+import org.apache.spark.sql.execution.datasources.spinach.{CreateIndex, DropIndex, IndexColumn, RefreshIndex}
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
 import org.apache.spark.sql.types.DataType
 
@@ -1408,4 +1408,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   override def visitIndexCol(ctx: IndexColContext): IndexColumn = withOrigin(ctx) {
     IndexColumn(ctx.identifier.getText, ctx.DESC == null)
   }
+
+  override def visitSpinachRefreshIndices(ctx: SpinachRefreshIndicesContext): LogicalPlan =
+    withOrigin(ctx) {
+      RefreshIndex(UnresolvedRelation(visitTableIdentifier(ctx.tableIdentifier)))
+    }
 }
