@@ -47,9 +47,11 @@ class SpinachDDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfte
   test("show index") {
     val data: Seq[(Int, String)] = (1 to 300).map { i => (i, s"this is test $i") }
     data.toDF("key", "value").registerTempTable("t")
+    checkAnswer(sql("show sindex from spinach_test_1"), Nil)
     sql("insert overwrite table spinach_test_1 select * from t")
     sql("insert overwrite table spinach_test_2 select * from t")
     sql("create sindex index1 on spinach_test_1 (a)")
+    checkAnswer(sql("show sindex from spinach_test_2"), Nil)
     sql("create sindex index2 on spinach_test_1 (b desc)")
     sql("create sindex index3 on spinach_test_1 (b asc, a desc)")
     sql("create sindex index4 on spinach_test_2 (a) using bloom")
