@@ -24,8 +24,7 @@ import org.apache.hadoop.fs.FSDataOutputStream
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
-import org.apache.spark.sql.execution.datasources.spinach.index.RangeInterval
-import org.apache.spark.sql.execution.datasources.spinach.utils.IndexUtils
+import org.apache.spark.sql.execution.datasources.spinach.index._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.Platform
 
@@ -57,6 +56,32 @@ class SampleBasedStatistics(sampleRate: Double = 0.1) extends Statistics {
     val sample_array_index = Random.shuffle(uniqueKeys.indices.toList).take(sample_size)
     sample_array_index.foreach(idx =>
       Statistics.writeInternalRow(converter, uniqueKeys(idx), fileOut))
+  }
+
+  // for SampleBasedStatistics, input keys should be the whole file
+  // instead of uniqueKeys, can be refactor later
+  def write(schema: StructType, writer: IndexOutputWriter, uniqueKeys: Array[InternalRow],
+            hashMap: java.util.HashMap[InternalRow, java.util.ArrayList[Long]],
+            offsetMap: java.util.HashMap[InternalRow, Long]): Unit = {
+    // SampleBasedStatistics file structure
+    // statistics_id        4 Bytes, Int, specify the [[Statistic]] type
+    // sample_size          4 Bytes, Int, number of UnsafeRow
+    //
+    // | unsafeRow-1 sizeInBytes | unsafeRow-1 content |   (4 + u1_sizeInBytes) Bytes, unsafeRow-1
+    // | unsafeRow-2 sizeInBytes | unsafeRow-2 content |   (4 + u2_sizeInBytes) Bytes, unsafeRow-2
+    // | unsafeRow-3 sizeInBytes | unsafeRow-3 content |   (4 + u3_sizeInBytes) Bytes, unsafeRow-3
+    // ...
+    // | unsafeRow-(sample_size) sizeInBytes | unsafeRow-(sample_size) content |
+
+    val converter = UnsafeProjection.create(schema)
+    val sample_size = (uniqueKeys.length * sampleRate).toInt
+
+    IndexUtils.writeInt(writer, id)
+    IndexUtils.writeInt(writer, sample_size)
+
+    val sample_array_index = Random.shuffle(uniqueKeys.indices.toList).take(sample_size)
+    sample_array_index.foreach(idx =>
+      Statistics.writeInternalRow(converter, uniqueKeys(idx), writer))
   }
 
   override var arrayOffset: Long = _

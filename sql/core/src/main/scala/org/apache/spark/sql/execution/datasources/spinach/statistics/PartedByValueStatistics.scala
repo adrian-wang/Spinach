@@ -24,8 +24,7 @@ import org.apache.hadoop.fs.FSDataOutputStream
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
-import org.apache.spark.sql.execution.datasources.spinach.index.{IndexScanner, RangeInterval}
-import org.apache.spark.sql.execution.datasources.spinach.utils.IndexUtils
+import org.apache.spark.sql.execution.datasources.spinach.index._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.Platform
 
@@ -159,6 +158,46 @@ class PartedByValueStatistics extends Statistics {
     }
   }
 
+  override def write(schema: StructType, writer: IndexOutputWriter,
+                     uniqueKeys: Array[InternalRow],
+                     hashMap: java.util.HashMap[InternalRow, java.util.ArrayList[Long]],
+                     offsetMap: java.util.HashMap[InternalRow, Long]): Unit = {
+    keySchema = schema
+
+    // first write statistic id
+    IndexUtils.writeInt(writer, id)
+
+    val size = hashMap.size()
+    if (size > 0) {
+      val partNum = if (size > maxPartNum) maxPartNum else size
+      val perSize = size / partNum
+
+      // first write part number
+      IndexUtils.writeInt(writer, partNum + 1)
+
+      var i = 0
+      var count = 0
+      var index = 0
+      while (i < partNum) {
+        index = i * perSize
+        var begin = Math.max(index - perSize + 1, 0)
+        while (begin <= index) {
+          count += hashMap.get(uniqueKeys(begin)).size()
+          begin += 1
+        }
+        writeEntry(writer, uniqueKeys(index), index, count)
+        i += 1
+      }
+
+      index += 1
+      while (index < uniqueKeys.size) {
+        count += hashMap.get(uniqueKeys(index)).size()
+        index += 1
+      }
+      writeEntry(writer, uniqueKeys.last, size - 1, count)
+    }
+  }
+
   private def writeEntry(fileOut: FSDataOutputStream,
                          internalRow: InternalRow,
                          index: Int, count: Int): Unit = {
@@ -166,5 +205,13 @@ class PartedByValueStatistics extends Statistics {
     IndexUtils.writeInt(fileOut, index)
     IndexUtils.writeInt(fileOut, count)
     fileOut.flush()
+  }
+
+  private def writeEntry(writer: IndexOutputWriter,
+                         internalRow: InternalRow,
+                         index: Int, count: Int): Unit = {
+    Statistics.writeInternalRow(converter, internalRow, writer)
+    IndexUtils.writeInt(writer, index)
+    IndexUtils.writeInt(writer, count)
   }
 }

@@ -24,6 +24,7 @@ import org.junit.Assert._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.execution.datasources.spinach.index.IndexUtils
 import org.apache.spark.unsafe.Platform
 
 

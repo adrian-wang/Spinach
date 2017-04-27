@@ -24,8 +24,7 @@ import org.apache.hadoop.fs.FSDataOutputStream
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
-import org.apache.spark.sql.execution.datasources.spinach.index.{IndexScanner, RangeInterval}
-import org.apache.spark.sql.execution.datasources.spinach.utils.IndexUtils
+import org.apache.spark.sql.execution.datasources.spinach.index._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.Platform
 
@@ -87,6 +86,25 @@ class MinMaxStatistics extends Statistics {
     writeStatistic(uniqueKeys.last, offsetMap, fileOut)
   }
 
+  override def write(schema: StructType, writer: IndexOutputWriter,
+                     uniqueKeys: Array[InternalRow],
+                     hashMap: java.util.HashMap[InternalRow, java.util.ArrayList[Long]],
+                     offsetMap: java.util.HashMap[InternalRow, Long]): Unit = {
+    keySchema = schema
+
+    // write statistic id
+    IndexUtils.writeInt(writer, id)
+
+    // write stats size
+    IndexUtils.writeInt(writer, 2)
+
+    // write minval
+    writeStatistic(uniqueKeys.head, offsetMap, writer)
+
+    // write maxval
+    writeStatistic(uniqueKeys.last, offsetMap, writer)
+  }
+
   private def getSimpleStatistics(stsArray: Array[Byte],
                                   offset: Long): ArrayBuffer[(Int, UnsafeRow, Long)] = {
     val sts = ArrayBuffer[(Int, UnsafeRow, Long)]()
@@ -122,5 +140,15 @@ class MinMaxStatistics extends Statistics {
     Statistics.writeInternalRow(converter, row, fileOut)
     IndexUtils.writeLong(fileOut, offsetMap.get(row))
     fileOut.flush()
+  }
+
+  // write min and max value at the beginning of index file
+  // the statistics is like
+  // | value[Bytes] | offset[Long] |
+  private def writeStatistic(row: InternalRow,
+                             offsetMap: java.util.HashMap[InternalRow, Long],
+                             writer: IndexOutputWriter) = {
+    Statistics.writeInternalRow(converter, row, writer)
+    IndexUtils.writeLong(writer, offsetMap.get(row))
   }
 }
