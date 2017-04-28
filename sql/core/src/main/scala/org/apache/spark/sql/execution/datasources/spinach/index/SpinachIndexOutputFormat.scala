@@ -102,8 +102,13 @@ private[index] class SpinachIndexOutputFormat[T] extends FileOutputFormat[Void, 
     val extension = ".index"
     val input = conf.get(IndexWriter.INPUT_FILE_NAME)
     // TODO replace '/' with OS specific separator
+    // scalastyle:off
+    println(input)
+    // scalastyle:on
     val simpleName = input.substring(input.lastIndexOf('/') + 1, input.lastIndexOf('.'))
-    val outputName = "." + simpleName + "." + conf.get(IndexWriter.INDEX_NAME) + extension
+    val directory = input.substring(0, input.lastIndexOf('/'))
+    val outputName =
+      directory + "/." + simpleName + "." + conf.get(IndexWriter.INDEX_NAME) + extension
     val file = this.getDefaultWorkFile(taskAttemptContext, outputName)
     val fs = file.getFileSystem(conf)
     // TODO maybe compression here
@@ -112,9 +117,7 @@ private[index] class SpinachIndexOutputFormat[T] extends FileOutputFormat[Void, 
   }
 
   override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-    val committer: FileOutputCommitter =
-      getOutputCommitter(context).asInstanceOf[FileOutputCommitter]
     // here extension is already unique
-    new Path(committer.getWorkPath, extension)
+    new Path(extension)
   }
 }

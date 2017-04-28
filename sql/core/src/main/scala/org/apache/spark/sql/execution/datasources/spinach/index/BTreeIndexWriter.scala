@@ -27,6 +27,7 @@ import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 
 import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.rdd.InputFileNameHolder
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
@@ -52,9 +53,10 @@ private[spinach] class BTreeIndexWriter(
       taskContext: TaskContext, iterator: Iterator[InternalRow]): Seq[WriteResult] = {
     executorSideSetup(taskContext)
     val configuration = taskAttemptContext.getConfiguration
+    // to get input filename
+    iterator.hasNext
     // configuration.set(DATASOURCE_OUTPUTPATH, outputPath)
-    InputFileName().setInitialValues()
-    val filename = InputFileName().eval().asInstanceOf[UTF8String].toString
+    val filename = InputFileNameHolder.getInputFileName().toString
     configuration.set(IndexWriter.INPUT_FILE_NAME, filename)
     // TODO deal with partition
     // configuration.set(FileOutputFormat.OUTDIR, getWorkPath)
