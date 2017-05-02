@@ -119,55 +119,53 @@ case class CreateIndex(
       // p.files.foreach(f => builder.addFileMeta(FileMeta("", 0, f.getPath.toString)))
       (metaBuilder, parent, existOld)
     })
-    if (indexType == BTreeIndexType) {
-      val job = Job.getInstance(sparkSession.sparkContext.hadoopConfiguration)
-      val queryExecution = Dataset.ofRows(sparkSession, relation).queryExecution
-      val bTreeIndexFileFormat = new BTreeIndexFileFormat
-      val ids =
-        indexColumns.map(c => s.map(_.name).toIndexedSeq.indexOf(c.columnName))
-      val keySchema = StructType(ids.map(s.toIndexedSeq(_)))
-      SQLExecution.withNewExecutionId(sparkSession, queryExecution) {
-        val indexRelation =
-          WriteIndexRelation(
-            sparkSession,
-            keySchema,
-            bTreeIndexFileFormat.prepareWrite(sparkSession, _, null, keySchema))
+    val job = Job.getInstance(sparkSession.sparkContext.hadoopConfiguration)
+    val queryExecution = Dataset.ofRows(sparkSession, relation).queryExecution
+    val bTreeIndexFileFormat = new BTreeIndexFileFormat
+    val ids =
+      indexColumns.map(c => s.map(_.name).toIndexedSeq.indexOf(c.columnName))
+    val keySchema = StructType(ids.map(s.toIndexedSeq(_)))
+    val retVal = SQLExecution.withNewExecutionId(sparkSession, queryExecution) {
+      val indexRelation =
+        WriteIndexRelation(
+          sparkSession,
+          keySchema,
+          bTreeIndexFileFormat.prepareWrite(sparkSession, _, null, keySchema))
 
-        val writerContainer = {
-          // TODO Partition and bucket TBD
-          new BTreeIndexWriter(
-            indexRelation,
-            job,
-            indexColumns,
-            keySchema,
-            indexName,
-            isAppend = true)
-        }
-
-        // This call shouldn't be put into the `try` block below because it only initializes and
-        // prepares the job, any exception thrown from here shouldn't cause abortJob() to be called.
-        writerContainer.driverSideSetup()
-
-        try {
-          val results =
-            sparkSession.sparkContext.runJob(queryExecution.toRdd, writerContainer.writeRows _)
-          writerContainer.commitJob(results.flatten)
-        } catch { case cause: Throwable =>
-          logError("Aborting job.", cause)
-          writerContainer.abortJob()
-          throw new SparkException("Job aborted.", cause)
-        }
+      val writerContainer = {
+        // TODO Partition and bucket TBD
+        IndexWriterFactory.getIndexWriter(indexRelation,
+          job,
+          indexColumns,
+          keySchema,
+          indexName,
+          isAppend = true,
+          indexType)
       }
-    } else {
-      val ret = SpinachIndexBuild(sparkSession, indexName,
-        indexColumns, s, bAndP.map(_._2), readerClassName, indexType).execute()
-      val retMap = ret.groupBy(_.parent)
-      bAndP.foreach(bp =>
-        retMap.getOrElse(bp._2.toString, Nil).foreach(r =>
-          if (!bp._3) bp._1.addFileMeta(
-            FileMeta(r.fingerprint, r.rowCount, r.dataFile))
-        ))
-    }
+
+      // This call shouldn't be put into the `try` block below because it only initializes and
+      // prepares the job, any exception thrown from here shouldn't cause abortJob() to be called.
+      writerContainer.driverSideSetup()
+
+      try {
+        val results = sparkSession.sparkContext.runJob(
+          queryExecution.toRdd, writerContainer.writeIndexFromRows _)
+        writerContainer.commitJob(results.flatten)
+        results.flatten
+      } catch { case cause: Throwable =>
+        logError("Aborting job.", cause)
+        writerContainer.abortJob()
+        throw new SparkException("Job aborted.", cause)
+      }
+    }.toSeq
+//    val ret = SpinachIndexBuild(sparkSession, indexName,
+//      indexColumns, s, bAndP.map(_._2), readerClassName, indexType).execute()
+    val retMap = retVal.groupBy(_.parent)
+    bAndP.foreach(bp =>
+      retMap.getOrElse(bp._2.toString, Nil).foreach(r =>
+        if (!bp._3) bp._1.addFileMeta(
+          FileMeta(r.fingerprint, r.rowCount, r.dataFile))
+      ))
     // write updated metas down
     bAndP.foreach(bp => DataSourceMeta.write(
       new Path(bp._2.toString, SpinachFileFormat.SPINACH_META_FILE),

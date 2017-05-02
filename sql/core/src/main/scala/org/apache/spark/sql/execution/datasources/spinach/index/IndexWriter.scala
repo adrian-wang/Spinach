@@ -19,8 +19,9 @@ package org.apache.spark.sql.execution.datasources.spinach.index
 
 import org.apache.hadoop.mapreduce.Job
 
-import org.apache.spark.SparkException
-import org.apache.spark.sql.execution.datasources.BaseWriterContainer
+import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.execution.datasources.{BaseWriterContainer, WriteResult}
 
 private[index] abstract class IndexWriter (
     relation: WriteIndexRelation,
@@ -47,6 +48,10 @@ private[index] abstract class IndexWriter (
     }
   }
 
+  def writeIndexFromRows(
+      taskContext: TaskContext, iterator: Iterator[InternalRow]): Seq[IndexBuildResult]
+  def writeRows(taskContext: TaskContext, iterator: Iterator[InternalRow]): Seq[WriteResult] =
+    writeIndexFromRows(taskContext, iterator)
 }
 
 private[index] object IndexWriter {

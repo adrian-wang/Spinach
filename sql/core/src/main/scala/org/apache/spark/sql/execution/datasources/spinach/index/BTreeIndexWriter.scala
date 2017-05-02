@@ -24,20 +24,17 @@ import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.Job
-import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.rdd.InputFileNameHolder
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
-import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils._
 import org.apache.spark.sql.execution.datasources.WriteResult
 import org.apache.spark.sql.execution.datasources.spinach.statistics._
 import org.apache.spark.sql.execution.datasources.spinach.utils.{BTreeNode, BTreeUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 // TODO respect `sparkSession.conf.get(SQLConf.PARTITION_MAX_FILES)`
@@ -49,8 +46,10 @@ private[spinach] class BTreeIndexWriter(
     indexName: String,
     isAppend: Boolean) extends IndexWriter(relation, job, isAppend) {
 
-  override def writeRows(
-      taskContext: TaskContext, iterator: Iterator[InternalRow]): Seq[WriteResult] = {
+  override def writeIndexFromRows(
+      taskContext: TaskContext, iterator: Iterator[InternalRow]): Seq[IndexBuildResult] = {
+    var taskReturn: Seq[IndexBuildResult] = Nil
+    var writeNewFile = false
     executorSideSetup(taskContext)
     val configuration = taskAttemptContext.getConfiguration
     // to get input filename
@@ -102,20 +101,26 @@ private[spinach] class BTreeIndexWriter(
       }
     }
 
-    def writeTask(): Unit = {
+    def writeTask(): Seq[IndexBuildResult] = {
       // key -> RowIDs list
       val hashMap = new java.util.HashMap[InternalRow, java.util.ArrayList[Long]]()
       var cnt = 0L
-      while (iterator.hasNext) {
-        val v = iterator.next().copy()
-        if (!hashMap.containsKey(v)) {
-          val list = new java.util.ArrayList[Long]()
-          list.add(cnt)
-          hashMap.put(v, list)
+      while (iterator.hasNext && !writeNewFile) {
+        val fname = InputFileNameHolder.getInputFileName().toString
+        if (fname != filename) {
+          taskReturn = taskReturn ++: writeIndexFromRows(taskContext, iterator)
+          writeNewFile = true
         } else {
-          hashMap.get(v).add(cnt)
+          val v = iterator.next().copy()
+          if (!hashMap.containsKey(v)) {
+            val list = new java.util.ArrayList[Long]()
+            list.add(cnt)
+            hashMap.put(v, list)
+          } else {
+            hashMap.get(v).add(cnt)
+          }
+          cnt = cnt + 1
         }
-        cnt = cnt + 1
       }
       val partitionUniqueSize = hashMap.size()
       val uniqueKeys = hashMap.keySet().toArray(new Array[InternalRow](partitionUniqueSize))
@@ -193,15 +198,15 @@ private[spinach] class BTreeIndexWriter(
       IndexUtils.writeLong(writer, dataEnd)
       IndexUtils.writeLong(writer, offsetMap.get(uniqueKeysList.getFirst))
 
-      writer.close()
-      IndexBuildResult(filename, cnt, "", new Path(filename).getParent.toString)
+      taskReturn :+ IndexBuildResult(filename, cnt, "", new Path(filename).getParent.toString)
     }
 
     // If anything below fails, we should abort the task.
     try {
       Utils.tryWithSafeFinallyAndFailureCallbacks {
-        writeTask()
+        val res = writeTask()
         commitTask()
+        res
       }(catchBlock = abortTask())
     } catch {
       case t: Throwable =>

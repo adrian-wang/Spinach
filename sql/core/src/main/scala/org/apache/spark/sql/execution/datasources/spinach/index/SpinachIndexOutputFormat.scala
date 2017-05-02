@@ -102,9 +102,6 @@ private[index] class SpinachIndexOutputFormat[T] extends FileOutputFormat[Void, 
     val extension = ".index"
     val input = conf.get(IndexWriter.INPUT_FILE_NAME)
     // TODO replace '/' with OS specific separator
-    // scalastyle:off
-    println(input)
-    // scalastyle:on
     val simpleName = input.substring(input.lastIndexOf('/') + 1, input.lastIndexOf('.'))
     val directory = input.substring(0, input.lastIndexOf('/'))
     val outputName =

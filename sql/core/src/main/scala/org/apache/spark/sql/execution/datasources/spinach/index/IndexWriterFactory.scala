@@ -17,22 +17,26 @@
 
 package org.apache.spark.sql.execution.datasources.spinach.index
 
-import org.apache.hadoop.mapreduce.{RecordWriter, TaskAttemptContext}
+import org.apache.hadoop.mapreduce.Job
 
-import org.apache.spark.sql.execution.datasources.OutputWriter
+import org.apache.spark.sql.types.StructType
 
-private[spinach] abstract class IndexOutputWriter(
-    bucketId: Option[Int],
-    context: TaskAttemptContext)
-  extends OutputWriter {
-  protected val writer: RecordWriter[Void, Any] = {
-    val outputFormat = new SpinachIndexOutputFormat[Any]()
-    outputFormat.getRecordWriter(context)
+private[index] object IndexWriterFactory {
+  def getIndexWriter(
+      relation: WriteIndexRelation,
+      job: Job,
+      indexColumns: Array[IndexColumn],
+      keySchema: StructType,
+      indexName: String,
+      isAppend: Boolean,
+      indexType: AnyIndexType): IndexWriter = {
+    indexType match {
+      case BTreeIndexType =>
+        new BTreeIndexWriter(relation, job, indexColumns, keySchema, indexName, isAppend)
+      case BloomFilterIndexType =>
+        new BloomFilterIndexWriter(relation, job, indexColumns, keySchema, indexName, isAppend)
+      case BitMapIndexType =>
+        new BitMapIndexWriter(relation, job, indexColumns, keySchema, indexName, isAppend)
+    }
   }
-
-  def write(b: Array[Byte]): Unit = write(b, 0, b.length)
-  def write(b: Array[Byte], off: Int, len: Int): Unit = writer.write(null, b)
-
-  def write(i: Int): Unit = writer.write(null, i)
-  // TODO block writeInternal
 }
