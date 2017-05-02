@@ -121,7 +121,7 @@ case class CreateIndex(
     })
     val job = Job.getInstance(sparkSession.sparkContext.hadoopConfiguration)
     val queryExecution = Dataset.ofRows(sparkSession, relation).queryExecution
-    val bTreeIndexFileFormat = new BTreeIndexFileFormat
+    val indexFileFormat = new SpinachIndexFileFormat
     val ids =
       indexColumns.map(c => s.map(_.name).toIndexedSeq.indexOf(c.columnName))
     val keySchema = StructType(ids.map(s.toIndexedSeq(_)))
@@ -130,7 +130,7 @@ case class CreateIndex(
         WriteIndexRelation(
           sparkSession,
           keySchema,
-          bTreeIndexFileFormat.prepareWrite(sparkSession, _, null, keySchema))
+          indexFileFormat.prepareWrite(sparkSession, _, null, keySchema))
 
       val writerContainer = {
         // TODO Partition and bucket TBD

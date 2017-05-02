@@ -17,14 +17,37 @@
 
 package org.apache.spark.sql.execution.datasources.spinach.index
 
+import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
+
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.execution.datasources.FileFormat
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.execution.datasources.{FileFormat, OutputWriterFactory}
 import org.apache.spark.sql.types.StructType
 
-private[index] abstract class SpinachIndexFileFormat
+private[index] class SpinachIndexFileFormat
   extends FileFormat
   with Logging
   with Serializable {
 
   override def inferSchema: Option[StructType] = None
+
+  /**
+   * Prepares a write job and returns an [[OutputWriterFactory]].  Client side job preparation can
+   * be put here.  For example, user defined output committer can be configured here
+   * by setting the output committer class in the conf of spark.sql.sources.outputCommitterClass.
+   */
+  override def prepareWrite(
+                             sparkSession: SparkSession,
+                             job: Job,
+                             options: Map[String, String],
+                             dataSchema: StructType): IndexOutputWriterFactory = {
+    new IndexOutputWriterFactory {
+      override def newInstance(
+                                bucketId: Option[Int],
+                                dataSchema: StructType,
+                                context: TaskAttemptContext): IndexOutputWriter = {
+        new BTreeIndexOutputWriter(bucketId, context)
+      }
+    }
+  }
 }
