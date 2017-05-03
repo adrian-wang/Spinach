@@ -139,7 +139,7 @@ case class CreateIndex(
           indexColumns,
           keySchema,
           indexName,
-          isAppend = true,
+          isAppend = false,
           indexType)
       }
 
