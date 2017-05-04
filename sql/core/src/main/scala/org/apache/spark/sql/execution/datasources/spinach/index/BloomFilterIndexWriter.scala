@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.spinach.index
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.{SparkException, TaskContext}
@@ -45,7 +45,21 @@ private[spinach] class BloomFilterIndexWriter(
     executorSideSetup(taskContext)
     val configuration = taskAttemptContext.getConfiguration
     // to get input filename
-    iterator.hasNext
+    if (!iterator.hasNext) return Nil
+    if (isAppend) {
+      val fs = FileSystem.get(configuration)
+      var skip = true
+      var nextFile = InputFileNameHolder.getInputFileName().toString
+      iterator.next()
+      while(iterator.hasNext && skip) {
+        val cacheFile = nextFile
+        nextFile = InputFileNameHolder.getInputFileName().toString
+        // avoid calling `fs.exists` for every row
+        skip = cacheFile == nextFile || fs.exists(new Path(nextFile))
+        iterator.next()
+      }
+      if (skip) return Nil
+    }
     val filename = InputFileNameHolder.getInputFileName().toString
     configuration.set(IndexWriter.INPUT_FILE_NAME, filename)
     // TODO deal with partition
@@ -89,7 +103,7 @@ private[spinach] class BloomFilterIndexWriter(
       val bfIndex = new BloomFilter(bfMaxBits, bfNumOfHashFunc)()
       var elemCnt = 0 // element count
       val boundReference = keySchema.zipWithIndex.map(x =>
-          BoundReference(x._2, x._1.dataType, nullable = true))
+        BoundReference(x._2, x._1.dataType, nullable = true))
       // for multi-column index, add all subsets into bloom filter
       // For example, a column with a = 1, b = 2, a and b are index columns
       // then three records: a = 1, b = 2, a = 1 b = 2, are inserted to bf

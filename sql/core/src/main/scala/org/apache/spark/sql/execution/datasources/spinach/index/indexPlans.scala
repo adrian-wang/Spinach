@@ -322,8 +322,45 @@ case class RefreshIndex(
           entries.map(e => IndexColumn(s(e).name))
         case it => sys.error(s"Not implemented index type $it")
       }
-      SpinachIndexBuild(sparkSession, i.name, indexColumns.toArray, s, bAndP.map(
-        _._2), readerClassName, indexType, overwrite = false).execute()
+      val job = Job.getInstance(sparkSession.sparkContext.hadoopConfiguration)
+      val queryExecution = Dataset.ofRows(sparkSession, relation).queryExecution
+      val indexFileFormat = new SpinachIndexFileFormat
+      val ids =
+        indexColumns.map(c => s.map(_.name).toIndexedSeq.indexOf(c.columnName))
+      val keySchema = StructType(ids.map(s.toIndexedSeq(_)))
+      SQLExecution.withNewExecutionId(sparkSession, queryExecution) {
+        val indexRelation =
+          WriteIndexRelation(
+            sparkSession,
+            keySchema,
+            indexFileFormat.prepareWrite(sparkSession, _, null, keySchema))
+
+        val writerContainer = {
+          // TODO Partition and bucket TBD
+          IndexWriterFactory.getIndexWriter(indexRelation,
+            job,
+            indexColumns.toArray,
+            keySchema,
+            i.name,
+            isAppend = true,
+            indexType)
+        }
+
+        // This call shouldn't be put into the `try` block below because it only initializes and
+        // prepares the job, any exception thrown from here shouldn't cause abortJob() to be called.
+        writerContainer.driverSideSetup()
+
+        try {
+          val results = sparkSession.sparkContext.runJob(
+            queryExecution.toRdd, writerContainer.writeIndexFromRows _)
+          writerContainer.commitJob(results.flatten)
+          results.flatten
+        } catch { case cause: Throwable =>
+          logError("Aborting job.", cause)
+          writerContainer.abortJob()
+          throw new SparkException("Job aborted.", cause)
+        }
+      }.toSeq
     })
     if (!buildrst.isEmpty) {
       val ret = buildrst.head

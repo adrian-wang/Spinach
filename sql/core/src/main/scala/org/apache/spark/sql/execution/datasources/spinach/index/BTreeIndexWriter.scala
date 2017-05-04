@@ -22,7 +22,7 @@ import java.util.Comparator
 
 import scala.collection.JavaConverters._
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.{SparkException, TaskContext}
@@ -60,8 +60,22 @@ private[spinach] class BTreeIndexWriter(
     executorSideSetup(taskContext)
     val configuration = taskAttemptContext.getConfiguration
     // to get input filename
-    iterator.hasNext
+    if (!iterator.hasNext) return Nil
     // configuration.set(DATASOURCE_OUTPUTPATH, outputPath)
+    if (isAppend) {
+      val fs = FileSystem.get(configuration)
+      var skip = true
+      var nextFile = InputFileNameHolder.getInputFileName().toString
+      iterator.next()
+      while(iterator.hasNext && skip) {
+        val cacheFile = nextFile
+        nextFile = InputFileNameHolder.getInputFileName().toString
+        // avoid calling `fs.exists` for every row
+        skip = cacheFile == nextFile || fs.exists(new Path(nextFile))
+        iterator.next()
+      }
+      if (skip) return Nil
+    }
     val filename = InputFileNameHolder.getInputFileName().toString
     configuration.set(IndexWriter.INPUT_FILE_NAME, filename)
     // TODO deal with partition
