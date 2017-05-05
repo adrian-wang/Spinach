@@ -62,6 +62,7 @@ private[spinach] class BloomFilterIndexWriter(
     }
     val filename = InputFileNameHolder.getInputFileName().toString
     configuration.set(IndexWriter.INPUT_FILE_NAME, filename)
+    configuration.set(IndexWriter.INDEX_NAME, indexName)
     // TODO deal with partition
     var writer = newIndexOutputWriter()
     writer.initConverter(dataSchema)
