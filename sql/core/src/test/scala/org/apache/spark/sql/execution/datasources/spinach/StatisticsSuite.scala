@@ -16,19 +16,17 @@
  */
 package org.apache.spark.sql.execution.datasources.spinach
 
-import java.io.{ByteArrayOutputStream}
-
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.hadoop.mapreduce.{RecordWriter, TaskAttemptContext}
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
-import org.apache.spark.sql.execution.datasources.spinach.index.{IndexOutputWriter, IndexScanner, IndexUtils, RangeInterval}
+import org.apache.spark.sql.execution.datasources.spinach.index.{IndexScanner, IndexUtils, RangeInterval}
 import org.apache.spark.sql.execution.datasources.spinach.statistics.Statistics
+import org.apache.spark.sql.execution.datasources.spinach.utils.TestIndexOutputWriter
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{DoubleType, IntegerType, StructField, StructType}
 import org.apache.spark.unsafe.Platform
@@ -122,18 +120,6 @@ class StatisticsSuite extends QueryTest with SharedSQLContext with BeforeAndAfte
   }
 
   test("Statistics.writeInternalRow function") {
-    // environment setup
-    class TestIndexOutputWriter extends IndexOutputWriter(bucketId = None, context = null) {
-      val buf = new ByteArrayOutputStream(8)
-      override protected lazy val writer: RecordWriter[Void, Any] =
-        new RecordWriter[Void, Any] {
-          override def close(context: TaskAttemptContext) = buf.close()
-          override def write(key: Void, value: Any) = value match {
-            case bytes: Array[Byte] => buf.write(bytes)
-            case i: Int => buf.write(i) // this will only write a byte
-          }
-        }
-    }
     val out = new TestIndexOutputWriter
 
     // write internalRows out
