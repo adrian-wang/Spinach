@@ -16,18 +16,18 @@
  */
 package org.apache.spark.sql.execution.datasources.spinach
 
-import java.io.File
+import java.io.{ByteArrayOutputStream}
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.mapreduce.{RecordWriter, TaskAttemptContext}
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
-import org.apache.spark.sql.execution.datasources.spinach.index.{IndexScanner, IndexUtils, RangeInterval}
+import org.apache.spark.sql.execution.datasources.spinach.index.{IndexOutputWriter, IndexScanner, IndexUtils, RangeInterval}
 import org.apache.spark.sql.execution.datasources.spinach.statistics.Statistics
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{DoubleType, IntegerType, StructField, StructType}
@@ -123,16 +123,23 @@ class StatisticsSuite extends QueryTest with SharedSQLContext with BeforeAndAfte
 
   test("Statistics.writeInternalRow function") {
     // environment setup
-    val temp_file = File.createTempFile("spark-5566", ".txt")
-    val hadoopConf = spark.sparkContext.hadoopConfiguration
-    val path = new Path(temp_file.getParent, temp_file.getName)
-    val fs = path.getFileSystem(hadoopConf)
-    val fileOut = fs.create(path, true)
+    class TestIndexOutputWriter extends IndexOutputWriter(bucketId = None, context = null) {
+      val buf = new ByteArrayOutputStream(8)
+      override protected lazy val writer: RecordWriter[Void, Any] =
+        new RecordWriter[Void, Any] {
+          override def close(context: TaskAttemptContext) = buf.close()
+          override def write(key: Void, value: Any) = value match {
+            case bytes: Array[Byte] => buf.write(bytes)
+            case i: Int => buf.write(i) // this will only write a byte
+          }
+        }
+    }
+    val out = new TestIndexOutputWriter
 
     // write internalRows out
     val internalRowsToWrite = (0 to 10).map(i => InternalRow(i + 0.0))
-    internalRowsToWrite.foreach(Statistics.writeInternalRow(converter, _, fileOut))
-    fileOut.close() // writing finished
+    internalRowsToWrite.foreach(Statistics.writeInternalRow(converter, _, out))
+    out.close() // writing finished
 
     // construct expected answer
     // write all content into a ByteArray
@@ -146,10 +153,7 @@ class StatisticsSuite extends QueryTest with SharedSQLContext with BeforeAndAfte
     byte_array_buffer.close()
 
     // start reading & checking
-    val fin = fs.open(path)
-    val length = fs.getContentSummary(path).getLength.toInt
-    val readContent = new Array[Byte](length)
-    fin.readFully(0, readContent)
+    val readContent = out.buf.toByteArray
     assert(checkByteArray(expectedAnswer, readContent))
   }
 

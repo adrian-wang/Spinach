@@ -58,3 +58,5 @@ private[index] object IndexWriter {
   val INPUT_FILE_NAME = "spark.sql.spinach.inputFileName"
   val INDEX_NAME = "spark.sql.spinach.indexName"
 }
+
+case class IndexBuildResult(dataFile: String, rowCount: Long, fingerprint: String, parent: String)

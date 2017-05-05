@@ -19,13 +19,14 @@ package org.apache.spark.sql.execution.datasources.spinach.index
 
 import org.apache.hadoop.mapreduce.{RecordWriter, TaskAttemptContext}
 
-import org.apache.spark.sql.execution.datasources.OutputWriter
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.execution.datasources._
 
-private[spinach] abstract class IndexOutputWriter(
+private[spinach] class IndexOutputWriter(
     bucketId: Option[Int],
     context: TaskAttemptContext)
   extends OutputWriter {
-  protected val writer: RecordWriter[Void, Any] = {
+  protected lazy val writer: RecordWriter[Void, Any] = {
     val outputFormat = new SpinachIndexOutputFormat[Any]()
     outputFormat.getRecordWriter(context)
   }
@@ -34,5 +35,9 @@ private[spinach] abstract class IndexOutputWriter(
   def write(b: Array[Byte], off: Int, len: Int): Unit = writer.write(null, b)
 
   def write(i: Int): Unit = writer.write(null, i)
+
+  override def close(): WriteResult = writer.close(context)
+
+  override def write(row: Row): Unit = throw new UnsupportedOperationException("don't use this")
   // TODO block writeInternal
 }

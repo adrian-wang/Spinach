@@ -46,7 +46,7 @@ private[index] class SpinachIndexFileFormat
                                 bucketId: Option[Int],
                                 dataSchema: StructType,
                                 context: TaskAttemptContext): IndexOutputWriter = {
-        new BTreeIndexOutputWriter(bucketId, context)
+        new IndexOutputWriter(bucketId, context)
       }
     }
   }

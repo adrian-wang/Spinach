@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution.datasources.spinach.statistics
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
-import org.apache.hadoop.fs.FSDataOutputStream
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
@@ -31,32 +29,6 @@ import org.apache.spark.unsafe.Platform
 
 class SampleBasedStatistics(sampleRate: Double = 0.1) extends Statistics {
   override val id: Int = 1
-
-  // for SampleBasedStatistics, input keys should be the whole file
-  // instead of uniqueKeys, can be refactor later
-  def write(schema: StructType, fileOut: FSDataOutputStream, uniqueKeys: Array[InternalRow],
-            hashMap: java.util.HashMap[InternalRow, java.util.ArrayList[Long]],
-            offsetMap: java.util.HashMap[InternalRow, Long]): Unit = {
-    // SampleBasedStatistics file structure
-    // statistics_id        4 Bytes, Int, specify the [[Statistic]] type
-    // sample_size          4 Bytes, Int, number of UnsafeRow
-    //
-    // | unsafeRow-1 sizeInBytes | unsafeRow-1 content |   (4 + u1_sizeInBytes) Bytes, unsafeRow-1
-    // | unsafeRow-2 sizeInBytes | unsafeRow-2 content |   (4 + u2_sizeInBytes) Bytes, unsafeRow-2
-    // | unsafeRow-3 sizeInBytes | unsafeRow-3 content |   (4 + u3_sizeInBytes) Bytes, unsafeRow-3
-    // ...
-    // | unsafeRow-(sample_size) sizeInBytes | unsafeRow-(sample_size) content |
-
-    val converter = UnsafeProjection.create(schema)
-    val sample_size = (uniqueKeys.length * sampleRate).toInt
-
-    IndexUtils.writeInt(fileOut, id)
-    IndexUtils.writeInt(fileOut, sample_size)
-
-    val sample_array_index = Random.shuffle(uniqueKeys.indices.toList).take(sample_size)
-    sample_array_index.foreach(idx =>
-      Statistics.writeInternalRow(converter, uniqueKeys(idx), fileOut))
-  }
 
   // for SampleBasedStatistics, input keys should be the whole file
   // instead of uniqueKeys, can be refactor later

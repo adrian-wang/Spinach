@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution.datasources.spinach.statistics
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.hadoop.fs.FSDataOutputStream
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
@@ -67,25 +65,6 @@ class MinMaxStatistics extends Statistics {
     if (result) -1 else 0
   }
 
-  override def write(schema: StructType, fileOut: FSDataOutputStream,
-                     uniqueKeys: Array[InternalRow],
-                     hashMap: java.util.HashMap[InternalRow, java.util.ArrayList[Long]],
-                     offsetMap: java.util.HashMap[InternalRow, Long]): Unit = {
-    keySchema = schema
-
-    // write statistic id
-    IndexUtils.writeInt(fileOut, id)
-
-    // write stats size
-    IndexUtils.writeInt(fileOut, 2)
-
-    // write minval
-    writeStatistic(uniqueKeys.head, offsetMap, fileOut)
-
-    // write maxval
-    writeStatistic(uniqueKeys.last, offsetMap, fileOut)
-  }
-
   override def write(schema: StructType, writer: IndexOutputWriter,
                      uniqueKeys: Array[InternalRow],
                      hashMap: java.util.HashMap[InternalRow, java.util.ArrayList[Long]],
@@ -129,17 +108,6 @@ class MinMaxStatistics extends Statistics {
     val value = Statistics.getUnsafeRow(keySchema.length, stsArray, base, size).copy()
     val offset = Platform.getLong(stsArray, Platform.BYTE_ARRAY_OFFSET + base + 4 + size)
     (size + 4, value, offset)
-  }
-
-  // write min and max value at the beginning of index file
-  // the statistics is like
-  // | value[Bytes] | offset[Long] |
-  private def writeStatistic(row: InternalRow,
-                             offsetMap: java.util.HashMap[InternalRow, Long],
-                             fileOut: FSDataOutputStream) = {
-    Statistics.writeInternalRow(converter, row, fileOut)
-    IndexUtils.writeLong(fileOut, offsetMap.get(row))
-    fileOut.flush()
   }
 
   // write min and max value at the beginning of index file

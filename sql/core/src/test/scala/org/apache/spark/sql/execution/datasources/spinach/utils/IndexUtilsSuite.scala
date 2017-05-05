@@ -20,11 +20,12 @@ package org.apache.spark.sql.execution.datasources.spinach.utils
 import java.io.{ByteArrayOutputStream, DataOutputStream}
 
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.mapreduce.{RecordWriter, TaskAttemptContext}
 import org.junit.Assert._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.execution.datasources.spinach.index.IndexUtils
+import org.apache.spark.sql.execution.datasources.spinach.index.{IndexOutputWriter, IndexUtils}
 import org.apache.spark.unsafe.Platform
 
 
@@ -51,6 +52,26 @@ class IndexUtilsSuite extends SparkFunSuite with Logging {
     assert(Platform.getLong(bytes, Platform.BYTE_ARRAY_OFFSET + 8) == 4321)
     assert(Platform.getLong(bytes, Platform.BYTE_ARRAY_OFFSET + 16) == 43210912381723L)
     assert(Platform.getLong(bytes, Platform.BYTE_ARRAY_OFFSET + 24) == -99128917321912L)
+  }
+
+  test("write int to IndexOutputWriter") {
+    class TestIndexOutputWriter extends IndexOutputWriter(bucketId = None, context = null) {
+      val buf = new ByteArrayOutputStream(8)
+      override protected lazy val writer: RecordWriter[Void, Any] =
+        new RecordWriter[Void, Any] {
+          override def close(context: TaskAttemptContext) = buf.close()
+          override def write(key: Void, value: Any) = value match {
+            case bytes: Array[Byte] => buf.write(bytes)
+            case i: Int => buf.write(i) // this will only write a byte
+          }
+        }
+    }
+    val out = new TestIndexOutputWriter
+    IndexUtils.writeInt(out, -19)
+    IndexUtils.writeInt(out, 4321)
+    val bytes = out.buf.toByteArray
+    assert(Platform.getInt(bytes, Platform.BYTE_ARRAY_OFFSET) == -19)
+    assert(Platform.getInt(bytes, Platform.BYTE_ARRAY_OFFSET + 4) == 4321)
   }
 
   test("index path generating") {

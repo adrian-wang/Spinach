@@ -21,8 +21,6 @@ import java.io.ByteArrayOutputStream
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.hadoop.fs.FSDataOutputStream
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.BaseOrdering
@@ -34,11 +32,6 @@ import org.apache.spark.unsafe.Platform
 abstract class Statistics{
   val id: Int
   var arrayOffset: Long
-
-  // TODO write function parameters need to be optimized
-  def write(schema: StructType, fileOut: FSDataOutputStream, uniqueKeys: Array[InternalRow],
-            hashMap: java.util.HashMap[InternalRow, java.util.ArrayList[Long]],
-            offsetMap: java.util.HashMap[InternalRow, Long]): Unit
 
   // TODO write function parameters need to be optimized
   def write(schema: StructType, writer: IndexOutputWriter, uniqueKeys: Array[InternalRow],
@@ -70,18 +63,6 @@ object Statistics {
     val writeRow = converter.apply(internalRow)
     IndexUtils.writeInt(keyBuf, writeRow.getSizeInBytes)
     writeRow
-  }
-
-  def writeInternalRow(converter: UnsafeProjection,
-                       internalRow: InternalRow,
-                       fileOut: FSDataOutputStream): Unit = {
-    val keyBuf = new ByteArrayOutputStream()
-    val value = convertHelper(converter, internalRow, keyBuf)
-    value.writeToStream(keyBuf, null)
-
-    keyBuf.writeTo(fileOut)
-    fileOut.flush()
-    keyBuf.close()
   }
 
   def writeInternalRow(converter: UnsafeProjection,
