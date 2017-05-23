@@ -19,16 +19,17 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.io.PrintStream
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SpinachSession
+import org.apache.spark.sql.{SpinachSession, SQLContext}
 import org.apache.spark.sql.hive.{HiveUtils, SpinachSessionState}
 import org.apache.spark.util.Utils
 
-object SpinachEnv extends Logging {
+private[hive] object SpinachEnv extends Logging {
   logDebug("Initializing Spinach Env")
 
-  import SparkSQLEnv._
+  var sqlContext: SQLContext = _
+  var sparkContext: SparkContext = _
 
   def init() {
     if (sqlContext == null) {
@@ -60,6 +61,8 @@ object SpinachEnv extends Logging {
       sessionState.metadataHive.setError(new PrintStream(System.err, true, "UTF-8"))
       sparkSession.conf.set("spark.sql.hive.version", HiveUtils.hiveExecutionVersion)
     }
+    SparkSQLEnv.sparkContext = sparkContext
+    SparkSQLEnv.sqlContext = sqlContext
   }
 
   /** Cleans up and shuts down the Spark SQL environments. */

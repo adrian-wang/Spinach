@@ -18,13 +18,18 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.parser.{AbstractSqlParser, ParserInterface, SqlBaseParser}
-import org.apache.spark.sql.execution.{SparkSqlAstBuilder, SparkSqlParser}
+import org.apache.spark.sql.catalyst.parser.{ParserInterface, SqlBaseParser}
+import org.apache.spark.sql.execution.SparkSqlParser
+import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.{SQLConf, VariableSubstitution}
 
 class SpinachSessionState(sparkSession: SpinachSession) extends HiveSessionState(sparkSession) {
   self =>
   // TODO extends `experimentalMethods.extraStrategies`
+  private lazy val sharedState: HiveSharedState = {
+    sparkSession.sharedState.asInstanceOf[HiveSharedState]
+  }
+  override lazy val metadataHive: HiveClient = sharedState.metadataHive.newSession()
 
   override lazy val sqlParser: ParserInterface = new SpinachSqlParser(conf)
 }
