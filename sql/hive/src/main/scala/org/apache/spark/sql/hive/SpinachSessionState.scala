@@ -22,7 +22,8 @@ import org.apache.spark.sql.catalyst.parser.{AbstractSqlParser, ParserInterface,
 import org.apache.spark.sql.execution.{SparkSqlAstBuilder, SparkSqlParser}
 import org.apache.spark.sql.internal.{SQLConf, VariableSubstitution}
 
-class SpinachSessionState(sparkSession: SparkSession) extends HiveSessionState(sparkSession) {
+class SpinachSessionState(sparkSession: SpinachSession) extends HiveSessionState(sparkSession) {
+  self =>
   // TODO extends `experimentalMethods.extraStrategies`
 
   override lazy val sqlParser: ParserInterface = new SpinachSqlParser(conf)

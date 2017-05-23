@@ -22,7 +22,7 @@ import java.io.PrintStream
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SpinachSession
-import org.apache.spark.sql.hive.{HiveSessionState, HiveUtils}
+import org.apache.spark.sql.hive.{HiveUtils, SpinachSessionState}
 import org.apache.spark.util.Utils
 
 object SpinachEnv extends Logging {
@@ -54,7 +54,7 @@ object SpinachEnv extends Logging {
       sparkContext = sparkSession.sparkContext
       sqlContext = sparkSession.sqlContext
 
-      val sessionState = sparkSession.sessionState.asInstanceOf[HiveSessionState]
+      val sessionState = sparkSession.sessionState.asInstanceOf[SpinachSessionState]
       sessionState.metadataHive.setOut(new PrintStream(System.out, true, "UTF-8"))
       sessionState.metadataHive.setInfo(new PrintStream(System.err, true, "UTF-8"))
       sessionState.metadataHive.setError(new PrintStream(System.err, true, "UTF-8"))
