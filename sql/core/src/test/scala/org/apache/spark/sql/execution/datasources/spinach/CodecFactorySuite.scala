@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution.datasources.spinach
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.parquet.format.CompressionCodec
-import org.scalacheck.Prop.forAll
 import org.scalacheck.{Arbitrary, Gen, Properties}
+import org.scalacheck.Prop.forAll
 import org.scalatest.prop.Checkers
 
 import org.apache.spark.SparkFunSuite
