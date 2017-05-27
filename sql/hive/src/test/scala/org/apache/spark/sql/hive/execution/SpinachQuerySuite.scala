@@ -22,6 +22,7 @@ import java.util.{Locale, TimeZone}
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.internal.SQLConf
 
@@ -41,6 +42,7 @@ class SpinachQuerySuite extends HiveComparisonTest with BeforeAndAfter  {
     Locale.setDefault(Locale.US)
     // Ensures that cross joins are enabled so that we can test them
     TestHive.setConf(SQLConf.CROSS_JOINS_ENABLED, true)
+    TestHive.setConf(HiveUtils.CONVERT_METASTORE_PARQUET, true)
   }
 
   override def afterAll() {
